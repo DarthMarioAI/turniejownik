@@ -16,6 +16,7 @@ export default function Turniejownik() {
   const [schedule, setSchedule] = useState([]);
   const [specialTeamA, setSpecialTeamA] = useState("");
   const [specialTeamB, setSpecialTeamB] = useState("");
+  const [versionTag, setVersionTag] = useState("1.0");
 
   const handleTeamChange = (index, key, value) => {
     const updated = [...teams];
@@ -70,20 +71,22 @@ export default function Turniejownik() {
     while (remainingMatches.length > 0) {
       const roundMatches = [];
       const usedTeams = new Set();
-      let i = 0;
+      const nextRound = [];
 
-      while (i < remainingMatches.length && roundMatches.length < fields) {
+      for (let i = 0; i < remainingMatches.length; i++) {
         const [a, b] = remainingMatches[i];
-        if (!usedTeams.has(a) && !usedTeams.has(b)) {
+        if (!usedTeams.has(a) && !usedTeams.has(b) && roundMatches.length < fields) {
           roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
           usedTeams.add(a);
           usedTeams.add(b);
           scheduledPairs.add(`${a}|${b}`);
-          remainingMatches.splice(i, 1);
         } else {
-          i++;
+          nextRound.push([a, b]);
         }
       }
+
+      remainingMatches.length = 0;
+      remainingMatches.push(...nextRound);
 
       if (roundMatches.length > 0) {
         rounds.push({ matches: roundMatches });
@@ -187,6 +190,16 @@ export default function Turniejownik() {
           ))}
         </div>
       )}
+
+      <div className="mt-12">
+        <label className="block font-medium">🔢 Wersja robocza:</label>
+        <input
+          type="text"
+          value={versionTag}
+          onChange={(e) => setVersionTag(e.target.value)}
+          className="border p-2 w-full max-w-xs"
+        />
+      </div>
     </div>
   );
 }
