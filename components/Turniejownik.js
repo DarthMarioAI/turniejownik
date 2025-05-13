@@ -67,21 +67,28 @@ export default function Turniejownik() {
 
     const rounds = [];
     const matchesQueue = [...allMatches];
+
     while (matchesQueue.length > 0) {
       const roundMatches = [];
       const usedTeams = new Set();
+      const remaining = [];
 
-      for (let i = 0; i < matchesQueue.length && roundMatches.length < fields; ) {
+      for (let i = 0; i < matchesQueue.length; i++) {
         const [a, b] = matchesQueue[i];
         if (!usedTeams.has(a) && !usedTeams.has(b)) {
           roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
           usedTeams.add(a);
           usedTeams.add(b);
-          matchesQueue.splice(i, 1);
+
+          if (roundMatches.length === fields) break;
         } else {
-          i++;
+          remaining.push(matchesQueue[i]);
         }
       }
+
+      matchesQueue.length = 0;
+      matchesQueue.push(...remaining);
+
       rounds.push({ matches: roundMatches });
     }
 
