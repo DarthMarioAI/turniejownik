@@ -46,56 +46,53 @@ export default function Turniejownik() {
   };
 
   const generateSchedule = () => {
-    const scheduledPairs = new Set();
-    const sameClubMap = new Map();
+    const matches = [];
+    const scheduled = new Set();
     const nameSet = new Set(teams.map(t => t.name));
+    const getClub = name => teams.find(t => t.name === name)?.club;
 
-    teams.forEach(t => {
-      if (!sameClubMap.has(t.club)) sameClubMap.set(t.club, []);
-      sameClubMap.get(t.club).push(t.name);
-    });
-
-    const canPlay = (a, b) => {
-      if (a === b || !nameSet.has(a) || !nameSet.has(b)) return false;
-      if (scheduledPairs.has(`${a}|${b}`) || scheduledPairs.has(`${b}|${a}`)) return false;
-      const clubA = teams.find(t => t.name === a)?.club;
-      const clubB = teams.find(t => t.name === b)?.club;
-      return clubA !== clubB;
-    };
-
-    let allMatches = [];
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
         const a = teams[i].name;
         const b = teams[j].name;
-        if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
-        if (canPlay(a, b)) allMatches.push([a, b]);
+        if (
+          a !== b &&
+          !scheduled.has(`${a}|${b}`) &&
+          !scheduled.has(`${b}|${a}`) &&
+          getClub(a) !== getClub(b) &&
+          !(a === specialTeamA && b === specialTeamB) &&
+          !(a === specialTeamB && b === specialTeamA)
+        ) {
+          matches.push([a, b]);
+        }
       }
     }
 
     const rounds = [];
-    const teamMatchCount = {};
-    while (allMatches.length > 0) {
-      allMatches = shuffleArray(allMatches);
-      const used = new Set();
+    const played = new Set();
+    const matchCount = {};
+
+    while (matches.length > 0) {
+      const usedTeams = new Set();
       const round = [];
       const remaining = [];
-      for (const [a, b] of allMatches) {
-        if (!used.has(a) && !used.has(b)) {
+      for (const match of matches) {
+        const [a, b] = match;
+        if (!usedTeams.has(a) && !usedTeams.has(b)) {
           round.push({ field: round.length + 1, pair: [a, b] });
-          used.add(a);
-          used.add(b);
-          scheduledPairs.add(`${a}|${b}`);
-          scheduledPairs.add(`${b}|${a}`);
-          teamMatchCount[a] = (teamMatchCount[a] || 0) + 1;
-          teamMatchCount[b] = (teamMatchCount[b] || 0) + 1;
+          usedTeams.add(a);
+          usedTeams.add(b);
+          scheduled.add(`${a}|${b}`);
+          matchCount[a] = (matchCount[a] || 0) + 1;
+          matchCount[b] = (matchCount[b] || 0) + 1;
           if (round.length >= fields) break;
         } else {
-          remaining.push([a, b]);
+          remaining.push(match);
         }
       }
       if (round.length > 0) rounds.push({ matches: round });
-      allMatches = remaining;
+      matches.length = 0;
+      matches.push(...remaining);
     }
 
     if (specialTeamA && specialTeamB) {
