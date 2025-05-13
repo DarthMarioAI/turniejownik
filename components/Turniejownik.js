@@ -13,6 +13,9 @@ export default function Turniejownik() {
   const [matchDuration, setMatchDuration] = useState(12);
   const [breakDuration, setBreakDuration] = useState(3);
   const [startTime, setStartTime] = useState("10:00");
+  const [schedule, setSchedule] = useState([]);
+  const [specialTeamA, setSpecialTeamA] = useState("");
+  const [specialTeamB, setSpecialTeamB] = useState("");
 
   const handleTeamChange = (index, key, value) => {
     const updated = [...teams];
@@ -33,7 +36,64 @@ export default function Turniejownik() {
   };
 
   const generateSchedule = () => {
-    alert("(Demo) Harmonogram generowany — backend w przygotowaniu");
+    const matches = [];
+    const scheduledPairs = new Set();
+    const sameClubMap = new Map();
+
+    teams.forEach(t => {
+      if (!sameClubMap.has(t.club)) sameClubMap.set(t.club, []);
+      sameClubMap.get(t.club).push(t.name);
+    });
+
+    const canPlay = (a, b) => {
+      if (a === b) return false;
+      if (scheduledPairs.has(`${a}|${b}`) || scheduledPairs.has(`${b}|${a}`)) return false;
+      const clubA = teams.find(t => t.name === a)?.club;
+      const clubB = teams.find(t => t.name === b)?.club;
+      return clubA !== clubB;
+    };
+
+    const possibleMatches = [];
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        const a = teams[i].name;
+        const b = teams[j].name;
+        if (canPlay(a, b)) {
+          if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
+          possibleMatches.push([a, b]);
+          scheduledPairs.add(`${a}|${b}`);
+        }
+      }
+    }
+
+    const matchesPerRound = fields;
+    const totalRounds = Math.ceil((possibleMatches.length + (specialTeamA && specialTeamB ? 1 : 0)) / matchesPerRound);
+    const generated = [];
+
+    for (let r = 0; r < totalRounds; r++) {
+      const round = { time: "", matches: [] };
+      for (let f = 0; f < matchesPerRound; f++) {
+        const matchIndex = r * matchesPerRound + f;
+        if (matchIndex >= possibleMatches.length) break;
+        round.matches.push({ field: f + 1, pair: possibleMatches[matchIndex] });
+      }
+      generated.push(round);
+    }
+
+    // Dodaj specjalną parę na koniec, jeśli zaznaczona
+    if (specialTeamA && specialTeamB) {
+      generated.push({
+        time: "",
+        matches: [
+          {
+            field: 1,
+            pair: [specialTeamA, specialTeamB]
+          }
+        ]
+      });
+    }
+
+    setSchedule(generated);
   };
 
   const exportTeamsToExcel = () => {
@@ -50,89 +110,73 @@ export default function Turniejownik() {
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div>
           <label className="block font-medium">Liczba boisk:</label>
-          <input
-            type="number"
-            min="1"
-            max="6"
-            className="border p-2 w-full"
-            value={fields}
-            onChange={(e) => setFields(parseInt(e.target.value))}
-          />
+          <input type="number" min="1" max="6" className="border p-2 w-full" value={fields} onChange={(e) => setFields(parseInt(e.target.value))} />
         </div>
         <div>
           <label className="block font-medium">Czas meczu (minuty):</label>
-          <input
-            type="number"
-            min="5"
-            max="30"
-            className="border p-2 w-full"
-            value={matchDuration}
-            onChange={(e) => setMatchDuration(parseInt(e.target.value))}
-          />
+          <input type="number" min="5" max="30" className="border p-2 w-full" value={matchDuration} onChange={(e) => setMatchDuration(parseInt(e.target.value))} />
         </div>
         <div>
           <label className="block font-medium">Przerwa po meczu (minuty):</label>
-          <input
-            type="number"
-            min="1"
-            max="15"
-            className="border p-2 w-full"
-            value={breakDuration}
-            onChange={(e) => setBreakDuration(parseInt(e.target.value))}
-          />
+          <input type="number" min="1" max="15" className="border p-2 w-full" value={breakDuration} onChange={(e) => setBreakDuration(parseInt(e.target.value))} />
         </div>
         <div>
           <label className="block font-medium">Godzina rozpoczęcia:</label>
-          <input
-            type="time"
-            className="border p-2 w-full"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-          />
+          <input type="time" className="border p-2 w-full" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div>
+          <label className="block font-medium">Specjalna para na ostatnią rundę:</label>
+          <select className="border p-2 w-full" value={specialTeamA} onChange={(e) => setSpecialTeamA(e.target.value)}>
+            <option value="">Wybierz drużynę A</option>
+            {teams.map((t, i) => (
+              <option key={`a-${i}`} value={t.name}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="pt-6">
+          <select className="border p-2 w-full" value={specialTeamB} onChange={(e) => setSpecialTeamB(e.target.value)}>
+            <option value="">Wybierz drużynę B</option>
+            {teams.map((t, i) => (
+              <option key={`b-${i}`} value={t.name}>{t.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 
       <h2 className="text-xl font-semibold mb-2">Drużyny:</h2>
       {teams.map((team, i) => (
         <div key={i} className="grid grid-cols-6 gap-2 mb-2">
-          <input
-            type="text"
-            className="border p-2 col-span-2"
-            placeholder={`Drużyna ${i + 1}`}
-            value={team.name}
-            onChange={(e) => handleTeamChange(i, "name", e.target.value)}
-          />
-          <input
-            type="text"
-            className="border p-2 col-span-2"
-            placeholder="Klub"
-            value={team.club}
-            onChange={(e) => handleTeamChange(i, "club", e.target.value)}
-          />
-          <input
-            type="color"
-            className="w-full h-10 p-1"
-            value={team.color}
-            onChange={(e) => handleTeamChange(i, "color", e.target.value)}
-          />
-          <button
-            onClick={() => removeTeam(i)}
-            className="text-red-600 font-bold"
-          >✕</button>
+          <input type="text" className="border p-2 col-span-2" placeholder={`Drużyna ${i + 1}`} value={team.name} onChange={(e) => handleTeamChange(i, "name", e.target.value)} />
+          <input type="text" className="border p-2 col-span-2" placeholder="Klub" value={team.club} onChange={(e) => handleTeamChange(i, "club", e.target.value)} />
+          <input type="color" className="w-full h-10 p-1" value={team.color} onChange={(e) => handleTeamChange(i, "color", e.target.value)} />
+          <button onClick={() => removeTeam(i)} className="text-red-600 font-bold">✕</button>
         </div>
       ))}
 
       <div className="flex gap-4 mt-4">
-        <button onClick={addTeam} className="bg-blue-600 text-white px-4 py-2 rounded">
-          ➕ Dodaj drużynę
-        </button>
-        <button onClick={generateSchedule} className="bg-green-600 text-white px-4 py-2 rounded">
-          🏁 Generuj harmonogram
-        </button>
-        <button onClick={exportTeamsToExcel} className="bg-gray-600 text-white px-4 py-2 rounded">
-          📥 Eksportuj do Excela
-        </button>
+        <button onClick={addTeam} className="bg-blue-600 text-white px-4 py-2 rounded">➕ Dodaj drużynę</button>
+        <button onClick={generateSchedule} className="bg-green-600 text-white px-4 py-2 rounded">🏁 Generuj harmonogram</button>
+        <button onClick={exportTeamsToExcel} className="bg-gray-600 text-white px-4 py-2 rounded">📥 Eksportuj do Excela</button>
       </div>
+
+      {schedule.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-2xl font-bold mb-4">📋 Harmonogram</h2>
+          {schedule.map((round, i) => (
+            <div key={i} className="mb-4">
+              <h3 className="font-semibold mb-2">Runda {i + 1}</h3>
+              <ul className="list-disc list-inside">
+                {round.matches.map((m, j) => (
+                  <li key={j}>Boisko {m.field}: {m.pair[0]} vs {m.pair[1]}</li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
