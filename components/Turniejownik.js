@@ -36,7 +36,6 @@ export default function Turniejownik() {
   };
 
   const generateSchedule = () => {
-    const matches = [];
     const scheduledPairs = new Set();
     const sameClubMap = new Map();
 
@@ -53,7 +52,7 @@ export default function Turniejownik() {
       return clubA !== clubB;
     };
 
-    const allMatches = [];
+    let allMatches = [];
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
         const a = teams[i].name;
@@ -66,30 +65,31 @@ export default function Turniejownik() {
     }
 
     const rounds = [];
-    const matchesQueue = [...allMatches];
+    const remainingMatches = [...allMatches];
 
-    while (matchesQueue.length > 0) {
+    while (remainingMatches.length > 0) {
       const roundMatches = [];
       const usedTeams = new Set();
-      const remaining = [];
+      let i = 0;
 
-      for (let i = 0; i < matchesQueue.length; i++) {
-        const [a, b] = matchesQueue[i];
+      while (i < remainingMatches.length && roundMatches.length < fields) {
+        const [a, b] = remainingMatches[i];
         if (!usedTeams.has(a) && !usedTeams.has(b)) {
           roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
           usedTeams.add(a);
           usedTeams.add(b);
-
-          if (roundMatches.length === fields) break;
+          scheduledPairs.add(`${a}|${b}`);
+          remainingMatches.splice(i, 1);
         } else {
-          remaining.push(matchesQueue[i]);
+          i++;
         }
       }
 
-      matchesQueue.length = 0;
-      matchesQueue.push(...remaining);
-
-      rounds.push({ matches: roundMatches });
+      if (roundMatches.length > 0) {
+        rounds.push({ matches: roundMatches });
+      } else {
+        break;
+      }
     }
 
     if (specialTeamA && specialTeamB) {
