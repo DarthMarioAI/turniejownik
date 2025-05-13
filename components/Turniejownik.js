@@ -2,21 +2,22 @@ import React, { useState } from "react";
 import * as XLSX from "xlsx";
 
 /* -------------------------------------------------------------
- *  Turniejownik – minimalne rundy, para specjalna w ostatniej,
- *  etykiety czasowe rund i „fair‑play” przydział boisk:
- *  ta sama drużyna max 2 razy z rzędu na tym samym boisku.
+ *  Turniejownik 1.8.1
+ *  • minimalna liczba rund  (fair‑play: max 2 kolejne mecze na tym samym boisku)
+ *  • para specjalna w ostatniej rundzie, jeśli to możliwe
+ *  • etykiety czasowe przy rundach
+ *  • EXPORT → plik .xlsx
+ *      ‑ Arkusz 1 „Harmonogram” – tabela: Runda | Godzina | [Boisko 1 A B] | [Boisko 2 A B] …
+ *      ‑ Arkusze „Boisko 1”, „Boisko 2”, … – lista meczów danego boiska z czasem
  * ------------------------------------------------------------- */
 
-// Domyślna paleta kolorów dla nowych drużyn
+// Domyślne kolory drużyn
 const defaultColors = [
   "#FFB6C1", "#87CEFA", "#90EE90", "#FFD700", "#FFA07A",
   "#DDA0DD", "#00CED1", "#F08080", "#98FB98", "#DA70D6"
 ];
 
-/**
- * Zwraca największy podzbiór meczów (≤ limit) bez powtórek drużyn.
- * Back‑tracking DFS – przy ≤ 10 drużynach działa w ułamku sekundy.
- */
+/** Największy podzbiór meczów (≤ limit) bez powtórek drużyn */
 const getBestMatching = (pairs, limit) => {
   let best = [];
   const dfs = (idx, curr, used) => {
@@ -37,50 +38,50 @@ const getBestMatching = (pairs, limit) => {
 };
 
 export default function Turniejownik() {
-  /* ---------------------- STATE ---------------------- */
+  /* ---------- STATE ---------- */
   const [teams, setTeams] = useState([{ name: "", club: "", color: defaultColors[0] }]);
   const [fields, setFields] = useState(4);
-  const [matchDuration, setMatchDuration] = useState(12);   // minuty
-  const [breakDuration, setBreakDuration] = useState(3);    // minuty
-  const [startTime, setStartTime] = useState("10:00");      // HH:MM
+  const [matchDuration, setMatchDuration] = useState(12);
+  const [breakDuration, setBreakDuration] = useState(3);
+  const [startTime, setStartTime] = useState("10:00");
   const [schedule, setSchedule] = useState([]);
   const [specialTeamA, setSpecialTeamA] = useState("");
   const [specialTeamB, setSpecialTeamB] = useState("");
-  const [versionTag, setVersionTag] = useState("1.7");
+  const [versionTag, setVersionTag] = useState("1.8.1");
 
-  /* -------------------- HELPERS ---------------------- */
+  /* ---------- HELPERS ---------- */
   const handleTeamChange = (idx, key, val) => {
     const next = [...teams];
     next[idx][key] = val;
     setTeams(next);
   };
-
   const addTeam = () => {
-    const usedColors = teams.map(t => t.color);
-    const color = defaultColors.find(c => !usedColors.includes(c)) || "#cccccc";
+    const used = teams.map(t => t.color);
+    const color = defaultColors.find(c => !used.includes(c)) || "#cccccc";
     setTeams([...teams, { name: "", club: "", color }]);
   };
-
   const removeTeam = idx => setTeams(teams.filter((_, i) => i !== idx));
 
-  /* ----------------- HARMONOGRAM --------------------- */
+  /* ---------- SCHEDULER ---------- */
   const generateSchedule = () => {
     const names = teams.map(t => t.name.trim()).filter(Boolean);
+    if (names.length < 2) { setSchedule([]); return; }
+
     const clubOf = n => (teams.find(t => t.name === n)?.club || "").trim().toLowerCase();
 
-    /* 1. lista wszystkich dozwolonych par */
+    // wszystkie dozwolone pary
     const pairs = [];
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         const a = names[i], b = names[j];
-        if (clubOf(a) && clubOf(a) === clubOf(b)) continue; // ten sam klub
-        if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue; // para specjalna (dodamy później)
+        if (clubOf(a) && clubOf(a) === clubOf(b)) continue;
+        if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
         pairs.push([a, b]);
       }
     }
-    pairs.sort((p, q) => (p[0] + p[1]).localeCompare(q[0] + q[1], "pl")); // deterministycznie
+    pairs.sort((p, q) => (p[0] + p[1]).localeCompare(q[0] + q[1], "pl"));
 
-    /* 2. minimalna liczba rund przy maks. wykorzystaniu boisk */
+    // minimalna liczba rund
     let remaining = [...pairs];
     const rawRounds = [];
     while (remaining.length) {
@@ -90,63 +91,103 @@ export default function Turniejownik() {
       remaining = remaining.filter(p => !used.has(`${p[0]}|${p[1]}`));
     }
 
-    /* 3. wstaw parę specjalną do ostatniej rundy lub nowej */
+    // para specjalna
     if (specialTeamA && specialTeamB) {
       const last = rawRounds[rawRounds.length - 1] || [];
-      const usedTeams = new Set(last.flat());
-      if (!usedTeams.has(specialTeamA) && !usedTeams.has(specialTeamB) && last.length < fields) {
-        last.push([specialTeamA, specialTeamB]);
-      } else {
-        rawRounds.push([[specialTeamA, specialTeamB]]);
-      }
+      const used = new Set(last.flat());
+      if (!used.has(specialTeamA) && !used.has(specialTeamB) && last.length < fields) last.push([specialTeamA, specialTeamB]);
+      else rawRounds.push([[specialTeamA, specialTeamB]]);
     }
 
-    /* 4. przydział boisk z limitem 2 kolejnych gier */
+    // przydział boisk fair‑play
     const lastField = Object.fromEntries(names.map(n => [n, null]));
     const streak = Object.fromEntries(names.map(n => [n, 0]));
 
-    const finalRounds = rawRounds.map(matches => {
-      const assigned = [];
-      const usedThisRound = new Set();
-      for (const pair of matches) {
+    const final = rawRounds.map(matches => {
+      const round = [];
+      const used = new Set();
+      for (const [a, b] of matches) {
         let field = null;
         for (let f = 1; f <= fields; f++) {
-          if (usedThisRound.has(f)) continue;
-          const okA = lastField[pair[0]] !== f || streak[pair[0]] < 2;
-          const okB = lastField[pair[1]] !== f || streak[pair[1]] < 2;
+          if (used.has(f)) continue;
+          const okA = lastField[a] !== f || streak[a] < 2;
+          const okB = lastField[b] !== f || streak[b] < 2;
           if (okA && okB) { field = f; break; }
         }
-        if (field == null) {
-          for (let f = 1; f <= fields; f++) if (!usedThisRound.has(f)) { field = f; break; }
-        }
-        const [a, b] = pair;
-        if (lastField[a] === field) streak[a] += 1; else { streak[a] = 1; lastField[a] = field; }
-        if (lastField[b] === field) streak[b] += 1; else { streak[b] = 1; lastField[b] = field; }
-        usedThisRound.add(field);
-        assigned.push({ field, pair });
+        if (!field) { for (let f = 1; f <= fields; f++) if (!used.has(f)) { field = f; break; } }
+        if (lastField[a] === field) streak[a]++; else { streak[a] = 1; lastField[a] = field; }
+        if (lastField[b] === field) streak[b]++; else { streak[b] = 1; lastField[b] = field; }
+        used.add(field);
+        round.push({ field, pair: [a, b] });
       }
-      assigned.sort((x, y) => x.field - y.field);
-      return { matches: assigned };
+      round.sort((x, y) => x.field - y.field);
+      return { matches: round };
     });
 
-    setSchedule(finalRounds);
+    setSchedule(final);
   };
 
-  /* -------------- CZAS RUND -------------------------- */
-  const totalRoundDuration = matchDuration + breakDuration;
-  const startMinutes = (() => { const [h, m] = startTime.split(":" ).map(Number); return h * 60 + m; })();
+  /* ---------- TIME UTILS ---------- */
+  const totalRound = matchDuration + breakDuration;
+  const startMin = (() => {
+    const [h, m] = startTime.split(":" ).map(Number);
+    return h * 60 + m;
+  })();
   const fmt = m => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-  const roundTimeLabel = idx => `${fmt(startMinutes + idx * totalRoundDuration)}‑${fmt(startMinutes + idx * totalRoundDuration + matchDuration)}`;
+  const roundLabel = idx => `${fmt(startMin + idx * totalRound)}‑${fmt(startMin + idx * totalRound + matchDuration)}`;
 
-  /* -------------- EXPORT TEAMS ----------------------- */
-  const exportTeamsToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(teams);
+  /* ---------- EXPORT EXCEL ---------- */
+  const exportToExcel = () => {
+    if (!schedule.length) return;
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Druzyny");
-    XLSX.writeFile(wb, "turniejownik_druzyny.xlsx");
+
+    /* Arkusz 1: Harmonogram */
+    const header = ["Runda", "Godzina"];
+    for (let f = 1; f <= fields; f++) header.push(`Boisko ${f} A`, `Boisko ${f} B`);
+    const rows = [header];
+
+    schedule.forEach((rnd, idx) => {
+      const row = [idx + 1, roundLabel(idx)];
+      for (let f = 1; f <= fields; f++) {
+        const match = rnd.matches.find(m => m.field === f);
+        if (match) row.push(match.pair[0], match.pair[1]);
+        else row.push("", "");
+      }
+      rows.push(row);
+    });
+
+    const wsMain = XLSX.utils.aoa_to_sheet(rows);
+    const merges = [];
+    for (let i = 0; i < fields; i++) merges.push({ s: { r: 0, c: 2 + i * 2 }, e: { r: 0, c: 3 + i * 2 } });
+    wsMain["!merges"] = merges;
+    XLSX.utils.book_append_sheet(wb, wsMain, "Harmonogram");
+
+    /* Arkusze poszczególnych boisk */
+      /* Arkusze poszczególnych boisk */
+      for (let f = 1; f <= fields; f++) {
+        const sheetRows = [
+          ["Runda", "Godzina", "Drużyna A", "Drużyna B"]
+        ];
+        schedule.forEach((rnd, idx) => {
+          const m = rnd.matches.find(x => x.field === f);
+          if (m) sheetRows.push([idx + 1, roundLabel(idx), m.pair[0], m.pair[1]]);
+        });
+        XLSX.utils.book_append_sheet(
+          wb,
+          XLSX.utils.aoa_to_sheet(sheetRows),
+          `Boisko ${f}`
+        );
+      }
+
+      /* Zapis pliku */
+      XLSX.writeFile(wb, "harmonogram_turnieju.xlsx");
+    };
+    /* ----- END exportToExcel ----- */
+
+    return wb;
   };
 
-  /* -------------------- RENDER ----------------------- */
+  /* ---------- RENDER ---------- */
   return (
     <div className="max-w-6xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Turniejownik ⚽</h1>
@@ -155,16 +196,37 @@ export default function Turniejownik() {
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div>
           <label className="block font-medium">Liczba boisk:</label>
-          <input type="number" min="1" max="8" className="border p-2 w-full" value={fields} onChange={e => setFields(parseInt(e.target.value) || 1)} />
+          <input
+            type="number"
+            min="1"
+            max="8"
+            className="border p-2 w-full"
+            value={fields}
+            onChange={e => setFields(parseInt(e.target.value) || 1)}
+          />
         </div>
         <div>
           <label className="block font-medium">Czas meczu (minuty):</label>
-          <input type="number" min="5" max="30" className="border p-2 w-full" value={matchDuration} onChange={e => setMatchDuration(parseInt(e.target.value) || 5)} />
+          <input
+            type="number"
+            min="5"
+            max="30"
+            className="border p-2 w-full"
+            value={matchDuration}
+            onChange={e => setMatchDuration(parseInt(e.target.value) || 5)}
+          />
         </div>
         <div>
           <label className="block font-medium">Przerwa po meczu (minuty):</label>
-          <input type="number" min="0" max="15" className="border p-2 w-full" value={breakDuration} onChange={e => setBreakDuration(parseInt(e.target.value) ?? 0)} />)
-                </div>
+          <input
+            type="number"
+            min="0"
+            max="15"
+            className="border p-2 w-full"
+            value={breakDuration}
+            onChange={e => setBreakDuration(parseInt(e.target.value) ?? 0)}
+          />
+        </div>
         <div>
           <label className="block font-medium">Godzina rozpoczęcia:</label>
           <input
@@ -185,7 +247,7 @@ export default function Turniejownik() {
             value={specialTeamA}
             onChange={e => setSpecialTeamA(e.target.value)}
           >
-            <option value="">Wybierz drużynę A</option>
+            <option value="">Wybierz drużynę A</option>
             {teams.map((t, i) => (
               <option key={`sa-${i}`} value={t.name}>
                 {t.name}
@@ -199,7 +261,7 @@ export default function Turniejownik() {
             value={specialTeamB}
             onChange={e => setSpecialTeamB(e.target.value)}
           >
-            <option value="">Wybierz drużynę B</option>
+            <option value="">Wybierz drużynę B</option>
             {teams.map((t, i) => (
               <option key={`sb-${i}`} value={t.name}>
                 {t.name}
@@ -257,10 +319,10 @@ export default function Turniejownik() {
           🏁 Generuj harmonogram
         </button>
         <button
-          onClick={exportTeamsToExcel}
-          className="bg-gray-600 text-white px-4 py-2 rounded"
+          onClick={exportToExcel}
+          className="bg-purple-600 text-white px-4 py-2 rounded"
         >
-          📥 Eksportuj do Excela
+          📤 Exportuj harmonogram
         </button>
       </div>
 
@@ -272,15 +334,12 @@ export default function Turniejownik() {
             <div key={idx} className="mb-4">
               <h3 className="font-semibold mb-2">
                 Runda {idx + 1}
-                <span className="text-sm text-gray-600">
-                  {" "}
-                  ({roundTimeLabel(idx)})
-                </span>
+                <span className="text-sm text-gray-600"> ({roundLabel(idx)})</span>
               </h3>
               <ul className="list-disc list-inside">
                 {round.matches.map((m, j) => (
                   <li key={j}>
-                    Boisko {m.field}: {m.pair[0]} vs {m.pair[1]}
+                    Boisko {m.field}: {m.pair[0]} vs {m.pair[1]}
                   </li>
                 ))}
               </ul>
@@ -302,4 +361,3 @@ export default function Turniejownik() {
     </div>
   );
 }
-
