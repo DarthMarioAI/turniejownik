@@ -51,17 +51,18 @@ export default function Turniejownik() {
     const getClub = name => teams.find(t => t.name === name)?.club?.trim() || null;
     const isValidClub = (club) => club && club.trim().toLowerCase() !== "klub" && club.trim() !== "";
 
-    for (let i = 0; i < teams.length; i++) {
-      for (let j = i + 1; j < teams.length; j++) {
-        const a = teams[i].name.trim();
-        const b = teams[j].name.trim();
+    const teamNames = teams.map(t => t.name.trim()).filter(Boolean);
+
+    for (let i = 0; i < teamNames.length; i++) {
+      for (let j = i + 1; j < teamNames.length; j++) {
+        const a = teamNames[i];
+        const b = teamNames[j];
         const clubA = getClub(a);
         const clubB = getClub(b);
 
         const sameClub = isValidClub(clubA) && isValidClub(clubB) && clubA.toLowerCase() === clubB.toLowerCase();
 
         if (
-          a && b &&
           a !== b &&
           !scheduled.has(`${a}|${b}`) &&
           !scheduled.has(`${b}|${a}`) &&
@@ -98,7 +99,7 @@ export default function Turniejownik() {
       matches.push(...remaining);
     }
 
-    if (specialTeamA && specialTeamB) {
+    if (specialTeamA && specialTeamB && !scheduled.has(`${specialTeamA}|${specialTeamB}`) && !scheduled.has(`${specialTeamB}|${specialTeamA}`)) {
       rounds.push({ matches: [{ field: 1, pair: [specialTeamA, specialTeamB] }] });
     }
 
@@ -188,7 +189,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza:</label>
+        <label className="block font-medium">🔢 Wersja robocza1:</label>
         <input
           type="text"
           value={versionTag}
