@@ -48,11 +48,10 @@ export default function Turniejownik() {
   const generateSchedule = () => {
     const matches = [];
     const scheduled = new Set();
-    const getClub = name => teams.find(t => t.name === name)?.club?.trim() || null;
-    const isValidClub = (club) => club && club.trim().toLowerCase() !== "klub" && club.trim() !== "";
-
+    const getClub = name => teams.find(t => t.name === name)?.club?.trim().toLowerCase() || null;
     const teamNames = teams.map(t => t.name.trim()).filter(Boolean);
 
+    // Generowanie unikalnych meczów, z wyjątkiem drużyn z tego samego klubu (jeśli klub jest podany)
     for (let i = 0; i < teamNames.length; i++) {
       for (let j = i + 1; j < teamNames.length; j++) {
         const a = teamNames[i];
@@ -60,13 +59,12 @@ export default function Turniejownik() {
         const clubA = getClub(a);
         const clubB = getClub(b);
 
-        const sameClub = isValidClub(clubA) && isValidClub(clubB) && clubA.toLowerCase() === clubB.toLowerCase();
-
+        const isSameClub = clubA && clubB && clubA === clubB;
         if (
           a !== b &&
           !scheduled.has(`${a}|${b}`) &&
           !scheduled.has(`${b}|${a}`) &&
-          !sameClub &&
+          !isSameClub &&
           !(a === specialTeamA && b === specialTeamB) &&
           !(a === specialTeamB && b === specialTeamA)
         ) {
@@ -189,7 +187,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza1:</label>
+        <label className="block font-medium">🔢 Wersja robocza:</label>
         <input
           type="text"
           value={versionTag}
