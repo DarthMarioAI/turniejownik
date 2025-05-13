@@ -49,17 +49,22 @@ export default function Turniejownik() {
     const matches = [];
     const scheduled = new Set();
     const nameSet = new Set(teams.map(t => t.name));
-    const getClub = name => teams.find(t => t.name === name)?.club;
+    const getClub = name => teams.find(t => t.name === name)?.club || null;
 
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
         const a = teams[i].name;
         const b = teams[j].name;
+        const clubA = getClub(a);
+        const clubB = getClub(b);
+
+        const sameClub = clubA && clubB && clubA === clubB;
+
         if (
           a !== b &&
           !scheduled.has(`${a}|${b}`) &&
           !scheduled.has(`${b}|${a}`) &&
-          getClub(a) !== getClub(b) &&
+          !sameClub &&
           !(a === specialTeamA && b === specialTeamB) &&
           !(a === specialTeamB && b === specialTeamA)
         ) {
@@ -185,7 +190,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza:</label>
+        <label className="block font-medium">🔢 Wersja robocza1:</label>
         <input
           type="text"
           value={versionTag}
