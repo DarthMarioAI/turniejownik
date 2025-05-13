@@ -48,10 +48,13 @@ export default function Turniejownik() {
   const generateSchedule = () => {
     const matches = [];
     const scheduled = new Set();
-    const getClub = name => teams.find(t => t.name === name)?.club?.trim().toLowerCase() || null;
+    const getClub = name => {
+      const raw = teams.find(t => t.name === name)?.club || "";
+      return raw.trim().toLowerCase();
+    };
+
     const teamNames = teams.map(t => t.name.trim()).filter(Boolean);
 
-    // Generowanie unikalnych meczów, z wyjątkiem drużyn z tego samego klubu (jeśli klub jest podany)
     for (let i = 0; i < teamNames.length; i++) {
       for (let j = i + 1; j < teamNames.length; j++) {
         const a = teamNames[i];
@@ -59,7 +62,8 @@ export default function Turniejownik() {
         const clubA = getClub(a);
         const clubB = getClub(b);
 
-        const isSameClub = clubA && clubB && clubA === clubB;
+        const isSameClub = clubA !== "" && clubA === clubB;
+
         if (
           a !== b &&
           !scheduled.has(`${a}|${b}`) &&
