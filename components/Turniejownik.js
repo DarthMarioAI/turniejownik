@@ -64,31 +64,32 @@ export default function Turniejownik() {
     }
 
     const rounds = [];
-    const remainingPairs = [...allMatches];
+    const maxRounds = 100;
+    let roundCount = 0;
 
-    while (remainingPairs.length > 0) {
+    while (allMatches.length > 0 && roundCount < maxRounds) {
       const usedTeams = new Set();
       const roundMatches = [];
 
-      for (let i = 0; i < remainingPairs.length; i++) {
-        const [a, b] = remainingPairs[i];
-        if (
-          !scheduledPairs.has(`${a}|${b}`) &&
-          !scheduledPairs.has(`${b}|${a}`) &&
-          !usedTeams.has(a) &&
-          !usedTeams.has(b) &&
-          canPlay(a, b)
-        ) {
-          roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
-          usedTeams.add(a);
-          usedTeams.add(b);
-          scheduledPairs.add(`${a}|${b}`);
-          if (roundMatches.length >= fields) break;
-        }
+      const available = allMatches.filter(([a, b]) =>
+        !usedTeams.has(a) &&
+        !usedTeams.has(b) &&
+        canPlay(a, b)
+      );
+
+      for (const [a, b] of available) {
+        if (roundMatches.length >= fields) break;
+        roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
+        usedTeams.add(a);
+        usedTeams.add(b);
+        scheduledPairs.add(`${a}|${b}`);
+        scheduledPairs.add(`${b}|${a}`);
+        allMatches = allMatches.filter(([x, y]) => !(x === a && y === b || x === b && y === a));
       }
 
       if (roundMatches.length === 0) break;
       rounds.push({ matches: roundMatches });
+      roundCount++;
     }
 
     if (specialTeamA && specialTeamB) {
@@ -188,7 +189,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza:1.1</label>
+        <label className="block font-medium">🔢 Wersja robocza:</label>
         <input
           type="text"
           value={versionTag}
