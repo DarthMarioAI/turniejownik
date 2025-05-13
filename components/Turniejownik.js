@@ -58,41 +58,37 @@ export default function Turniejownik() {
       for (let j = i + 1; j < teams.length; j++) {
         const a = teams[i].name;
         const b = teams[j].name;
-        if (canPlay(a, b)) {
-          if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
-          allMatches.push([a, b]);
-        }
+        if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
+        allMatches.push([a, b]);
       }
     }
 
     const rounds = [];
-    const remainingMatches = [...allMatches];
+    const remainingPairs = [...allMatches];
 
-    while (remainingMatches.length > 0) {
-      const roundMatches = [];
+    while (remainingPairs.length > 0) {
       const usedTeams = new Set();
-      const nextRound = [];
+      const roundMatches = [];
 
-      for (let i = 0; i < remainingMatches.length; i++) {
-        const [a, b] = remainingMatches[i];
-        if (!usedTeams.has(a) && !usedTeams.has(b) && roundMatches.length < fields) {
+      for (let i = 0; i < remainingPairs.length; i++) {
+        const [a, b] = remainingPairs[i];
+        if (
+          !scheduledPairs.has(`${a}|${b}`) &&
+          !scheduledPairs.has(`${b}|${a}`) &&
+          !usedTeams.has(a) &&
+          !usedTeams.has(b) &&
+          canPlay(a, b)
+        ) {
           roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
           usedTeams.add(a);
           usedTeams.add(b);
           scheduledPairs.add(`${a}|${b}`);
-        } else {
-          nextRound.push([a, b]);
+          if (roundMatches.length >= fields) break;
         }
       }
 
-      remainingMatches.length = 0;
-      remainingMatches.push(...nextRound);
-
-      if (roundMatches.length > 0) {
-        rounds.push({ matches: roundMatches });
-      } else {
-        break;
-      }
+      if (roundMatches.length === 0) break;
+      rounds.push({ matches: roundMatches });
     }
 
     if (specialTeamA && specialTeamB) {
@@ -192,7 +188,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza:</label>
+        <label className="block font-medium">🔢 Wersja robocza:1.1</label>
         <input
           type="text"
           value={versionTag}
