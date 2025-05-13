@@ -74,8 +74,9 @@ export default function Turniejownik() {
     }
 
     const rounds = [];
+    const teamMatchCount = {};
     while (allMatches.length > 0) {
-      allMatches = shuffleArray(allMatches); // tasowanie poprawia rozkład
+      allMatches = shuffleArray(allMatches);
       const used = new Set();
       const round = [];
       const remaining = [];
@@ -86,6 +87,8 @@ export default function Turniejownik() {
           used.add(b);
           scheduledPairs.add(`${a}|${b}`);
           scheduledPairs.add(`${b}|${a}`);
+          teamMatchCount[a] = (teamMatchCount[a] || 0) + 1;
+          teamMatchCount[b] = (teamMatchCount[b] || 0) + 1;
           if (round.length >= fields) break;
         } else {
           remaining.push([a, b]);
@@ -185,7 +188,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza1:</label>
+        <label className="block font-medium">🔢 Wersja robocza:</label>
         <input
           type="text"
           value={versionTag}
