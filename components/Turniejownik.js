@@ -7,6 +7,15 @@ const defaultColors = [
   "#DDA0DD", "#00CED1", "#F08080", "#98FB98", "#DA70D6"
 ];
 
+const shuffleArray = (array) => {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
 export default function Turniejownik() {
   const [teams, setTeams] = useState([{ name: "", club: "", color: defaultColors[0] }]);
   const [fields, setFields] = useState(4);
@@ -66,6 +75,7 @@ export default function Turniejownik() {
 
     const rounds = [];
     while (allMatches.length > 0) {
+      allMatches = shuffleArray(allMatches); // tasowanie poprawia rozkład
       const used = new Set();
       const round = [];
       const remaining = [];
@@ -175,7 +185,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza:</label>
+        <label className="block font-medium">🔢 Wersja robocza1:</label>
         <input
           type="text"
           value={versionTag}
