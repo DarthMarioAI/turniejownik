@@ -163,7 +163,6 @@ export default function Turniejownik() {
     XLSX.utils.book_append_sheet(wb, wsMain, "Harmonogram");
 
     /* Arkusze poszczególnych boisk */
-      /* Arkusze poszczególnych boisk */
       for (let f = 1; f <= fields; f++) {
         const sheetRows = [
           ["Runda", "Godzina", "Drużyna A", "Drużyna B"]
