@@ -187,7 +187,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza2:</label>
+        <label className="block font-medium">🔢 Wersja robocza1.2:</label>
         <input
           type="text"
           value={versionTag}
