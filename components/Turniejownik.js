@@ -53,37 +53,40 @@ export default function Turniejownik() {
       return clubA !== clubB;
     };
 
-    const possibleMatches = [];
+    const allMatches = [];
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
         const a = teams[i].name;
         const b = teams[j].name;
         if (canPlay(a, b)) {
           if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
-          possibleMatches.push([a, b]);
-          scheduledPairs.add(`${a}|${b}`);
+          allMatches.push([a, b]);
         }
       }
     }
 
-    const matchesPerRound = fields;
-    const totalRounds = Math.ceil((possibleMatches.length + (specialTeamA && specialTeamB ? 1 : 0)) / matchesPerRound);
-    const generated = [];
+    const rounds = [];
+    const matchesQueue = [...allMatches];
+    while (matchesQueue.length > 0) {
+      const roundMatches = [];
+      const usedTeams = new Set();
 
-    for (let r = 0; r < totalRounds; r++) {
-      const round = { time: "", matches: [] };
-      for (let f = 0; f < matchesPerRound; f++) {
-        const matchIndex = r * matchesPerRound + f;
-        if (matchIndex >= possibleMatches.length) break;
-        round.matches.push({ field: f + 1, pair: possibleMatches[matchIndex] });
+      for (let i = 0; i < matchesQueue.length && roundMatches.length < fields; ) {
+        const [a, b] = matchesQueue[i];
+        if (!usedTeams.has(a) && !usedTeams.has(b)) {
+          roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
+          usedTeams.add(a);
+          usedTeams.add(b);
+          matchesQueue.splice(i, 1);
+        } else {
+          i++;
+        }
       }
-      generated.push(round);
+      rounds.push({ matches: roundMatches });
     }
 
-    // Dodaj specjalną parę na koniec, jeśli zaznaczona
     if (specialTeamA && specialTeamB) {
-      generated.push({
-        time: "",
+      rounds.push({
         matches: [
           {
             field: 1,
@@ -93,7 +96,7 @@ export default function Turniejownik() {
       });
     }
 
-    setSchedule(generated);
+    setSchedule(rounds);
   };
 
   const exportTeamsToExcel = () => {
