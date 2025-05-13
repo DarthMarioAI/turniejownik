@@ -49,6 +49,7 @@ export default function Turniejownik() {
     const matches = [];
     const scheduled = new Set();
     const getClub = name => teams.find(t => t.name === name)?.club?.trim() || null;
+    const isValidClub = (club) => club && club.trim().toLowerCase() !== "klub" && club.trim() !== "";
 
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
@@ -57,7 +58,7 @@ export default function Turniejownik() {
         const clubA = getClub(a);
         const clubB = getClub(b);
 
-        const sameClub = clubA && clubB && clubA === clubB;
+        const sameClub = isValidClub(clubA) && isValidClub(clubB) && clubA.toLowerCase() === clubB.toLowerCase();
 
         if (
           a && b &&
