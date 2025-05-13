@@ -71,21 +71,18 @@ export default function Turniejownik() {
       const usedTeams = new Set();
       const roundMatches = [];
 
-      const available = allMatches.filter(([a, b]) =>
-        !usedTeams.has(a) &&
-        !usedTeams.has(b) &&
-        canPlay(a, b)
-      );
-
-      for (const [a, b] of available) {
+      for (const [a, b] of allMatches) {
         if (roundMatches.length >= fields) break;
-        roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
-        usedTeams.add(a);
-        usedTeams.add(b);
-        scheduledPairs.add(`${a}|${b}`);
-        scheduledPairs.add(`${b}|${a}`);
-        allMatches = allMatches.filter(([x, y]) => !(x === a && y === b || x === b && y === a));
+        if (!usedTeams.has(a) && !usedTeams.has(b) && canPlay(a, b)) {
+          roundMatches.push({ field: roundMatches.length + 1, pair: [a, b] });
+          usedTeams.add(a);
+          usedTeams.add(b);
+          scheduledPairs.add(`${a}|${b}`);
+          scheduledPairs.add(`${b}|${a}`);
+        }
       }
+
+      allMatches = allMatches.filter(([a, b]) => !scheduledPairs.has(`${a}|${b}`) && !scheduledPairs.has(`${b}|${a}`));
 
       if (roundMatches.length === 0) break;
       rounds.push({ matches: roundMatches });
@@ -104,6 +101,7 @@ export default function Turniejownik() {
     }
 
     setSchedule(rounds);
+  };
   };
 
   const exportTeamsToExcel = () => {
@@ -189,7 +187,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza:</label>
+        <label className="block font-medium">🔢 Wersja robocza2:</label>
         <input
           type="text"
           value={versionTag}
