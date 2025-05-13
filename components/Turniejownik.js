@@ -48,19 +48,19 @@ export default function Turniejownik() {
   const generateSchedule = () => {
     const matches = [];
     const scheduled = new Set();
-    const nameSet = new Set(teams.map(t => t.name));
-    const getClub = name => teams.find(t => t.name === name)?.club || null;
+    const getClub = name => teams.find(t => t.name === name)?.club?.trim() || null;
 
     for (let i = 0; i < teams.length; i++) {
       for (let j = i + 1; j < teams.length; j++) {
-        const a = teams[i].name;
-        const b = teams[j].name;
+        const a = teams[i].name.trim();
+        const b = teams[j].name.trim();
         const clubA = getClub(a);
         const clubB = getClub(b);
 
         const sameClub = clubA && clubB && clubA === clubB;
 
         if (
+          a && b &&
           a !== b &&
           !scheduled.has(`${a}|${b}`) &&
           !scheduled.has(`${b}|${a}`) &&
@@ -75,7 +75,6 @@ export default function Turniejownik() {
 
     const rounds = [];
     const played = new Set();
-    const matchCount = {};
 
     while (matches.length > 0) {
       const usedTeams = new Set();
@@ -88,8 +87,6 @@ export default function Turniejownik() {
           usedTeams.add(a);
           usedTeams.add(b);
           scheduled.add(`${a}|${b}`);
-          matchCount[a] = (matchCount[a] || 0) + 1;
-          matchCount[b] = (matchCount[b] || 0) + 1;
           if (round.length >= fields) break;
         } else {
           remaining.push(match);
@@ -190,7 +187,7 @@ export default function Turniejownik() {
       )}
 
       <div className="mt-12">
-        <label className="block font-medium">🔢 Wersja robocza1:</label>
+        <label className="block font-medium">🔢 Wersja robocza:</label>
         <input
           type="text"
           value={versionTag}
