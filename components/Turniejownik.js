@@ -232,7 +232,7 @@ if (specialTeamA && specialTeamB) {
         </div>
         <div>
           <label className="block font-medium">Czas meczu (minuty):</label>
-          <input type="number" min="5" max="30" className="border p-2 w-full"
+          <input type="number" min="3" max="30" className="border p-2 w-full"
                  value={matchDuration} onChange={e=>setMatchDuration(parseInt(e.target.value)||5)}/>
         </div>
         <div>
