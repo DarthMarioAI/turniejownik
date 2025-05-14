@@ -2,11 +2,11 @@ import React, { useState } from "react";
 import * as XLSX from "xlsx";
 
 /* -------------------------------------------------------------
- *  Turniejownik v1.8.2 – pełna wersja
- *  • minimalne rundy, para specjalna w ostatniej
- *  • fair‑play boisk (max 2 mecze z rzędu na tym samym boisku)
- *  • etykiety czasowe przy rundach
- *  • eksport do Excel (arkusz zbiorczy + osobne arkusze boisk)
+ *  Turniejownik 2.0  (optymalny harmonogram)
+ * -------------------------------------------------------------
+ *  • Edge‑colouring DFS – minimalna liczba rund zagwarantowana
+ *  • Para specjalna i max 2 kolejne mecze na tym samym boisku
+ *  • Eksport: arkusz zbiorczy + arkusze boisk
  * ------------------------------------------------------------- */
 
 const defaultColors = [
@@ -14,156 +14,183 @@ const defaultColors = [
   "#DDA0DD", "#00CED1", "#F08080", "#98FB98", "#DA70D6"
 ];
 
-/* największy podzbiór meczów (≤ limit) bez powtórek drużyn */
-const getBestMatching = (pairs, limit) => {
-  let best = [];
-  const dfs = (idx, curr, used) => {
-    if (curr.length > best.length) best = [...curr];
-    if (curr.length === limit || idx >= pairs.length) return;
-    for (let i = idx; i < pairs.length; i++) {
-      const [a, b] = pairs[i];
-      if (used.has(a) || used.has(b)) continue;
-      used.add(a); used.add(b);
-      curr.push(pairs[i]);
-      dfs(i + 1, curr, used);
-      curr.pop();
-      used.delete(a); used.delete(b);
-    }
-  };
-  dfs(0, [], new Set());
-  return best;
-};
+/* -----------------------------  HELPERS  ----------------------------- */
 
+/* minimalne k‑kolorowanie krawędzi (k = fields) z limitem „≤k per round” */
+function buildOptimalRounds(pairs, fields) {
+  const lower = Math.ceil(pairs.length / fields);
+
+  const canPlace = (round, [a, b]) =>
+    round.matches.length < fields &&
+    !round.teamSet.has(a) && !round.teamSet.has(b);
+
+  function dfs(idx, rounds) {
+    if (idx === pairs.length) return true;                // plan gotowy
+    const pair = pairs[idx];
+
+    // heurystyka: próbuj rundy z najmniejszą liczbą meczów
+    const order = [...rounds].sort((r1, r2) => r1.matches.length - r2.matches.length);
+    for (const rnd of order) {
+      if (!canPlace(rnd, pair)) continue;
+      rnd.matches.push({ pair });               // field = null na razie
+      rnd.teamSet.add(pair[0]); rnd.teamSet.add(pair[1]);
+
+      if (dfs(idx + 1, rounds)) return true;
+
+      rnd.matches.pop();
+      rnd.teamSet.delete(pair[0]); rnd.teamSet.delete(pair[1]);
+    }
+    return false;
+  }
+
+  for (let R = lower; R <= pairs.length; R++) {
+    const rounds = Array.from({ length: R }, () => ({ matches: [], teamSet: new Set() }));
+    if (dfs(0, rounds)) return rounds.filter(r => r.matches.length);
+  }
+  return null;   // nie powinno się zdarzyć
+}
+
+/* przydział numerów pól z zasadą „max 2 kolejne na tym samym boisku” */
+function assignFieldsFairPlay(rounds, fields) {
+  const lastField = new Map();
+  const streak    = new Map();
+
+  rounds.forEach(rnd => {
+    const usedFld = new Set();
+    rnd.matches.forEach(m => {
+      const [a, b] = m.pair;
+
+      let field = null;
+      for (let f = 1; f <= fields; f++) {
+        if (usedFld.has(f)) continue;
+        const okA = lastField.get(a) !== f || (streak.get(a) || 0) < 2;
+        const okB = lastField.get(b) !== f || (streak.get(b) || 0) < 2;
+        if (okA && okB) { field = f; break; }
+      }
+      if (!field) {                         // awaryjnie – pierwsze wolne
+        for (let f = 1; f <= fields; f++) if (!usedFld.has(f)) { field = f; break; }
+      }
+      m.field = field;
+
+      // update streaks
+      if (lastField.get(a) === field) streak.set(a, (streak.get(a) || 0) + 1);
+      else { streak.set(a, 1); lastField.set(a, field); }
+
+      if (lastField.get(b) === field) streak.set(b, (streak.get(b) || 0) + 1);
+      else { streak.set(b, 1); lastField.set(b, field); }
+
+      usedFld.add(field);
+    });
+    rnd.matches.sort((x, y) => x.field - y.field);
+  });
+
+  return rounds;
+}
+
+/* ---------------------------  KOMPONENT  ------------------------------ */
 export default function Turniejownik() {
-  /* ----- STATE ----- */
-  const [teams, setTeams]       = useState([{ name: "", club: "", color: defaultColors[0] }]);
-  const [fields, setFields]     = useState(4);
+  /* ---- state ---- */
+  const [teams, setTeams] = useState([{ name: "", club: "", color: defaultColors[0] }]);
+  const [fields, setFields] = useState(4);
   const [matchDuration, setMatchDuration] = useState(12);
   const [breakDuration, setBreakDuration] = useState(3);
-  const [startTime, setStartTime]         = useState("10:00");
-  const [schedule, setSchedule] = useState([]);
+  const [startTime, setStartTime]   = useState("10:00");
+  const [schedule, setSchedule]     = useState([]);
   const [specialTeamA, setSpecialTeamA] = useState("");
   const [specialTeamB, setSpecialTeamB] = useState("");
-  const [versionTag,  setVersionTag]  = useState("1.8.2");
+  const [versionTag,  setVersionTag]    = useState("2.0");
 
-  /* ----- HANDLERY ----- */
-  const handleTeamChange = (i, key, val) => {
-    const next = [...teams]; next[i][key] = val; setTeams(next);
+  /* ---- team helpers ---- */
+  const handleTeamChange = (i, k, v) => {
+    const next = [...teams]; next[i][k] = v; setTeams(next);
   };
-  const addTeam    = () => {
+  const addTeam = () => {
     const used = teams.map(t => t.color);
     const color = defaultColors.find(c => !used.includes(c)) || "#cccccc";
     setTeams([...teams, { name: "", club: "", color }]);
   };
-  const removeTeam = (i) => setTeams(teams.filter((_, idx) => idx !== i));
+  const removeTeam = i => setTeams(teams.filter((_, idx) => idx !== i));
 
-  /* ----- GENERATE SCHEDULE ----- */
+  /* ---- scheduler ---- */
   const generateSchedule = () => {
+    /* 0) listy nazw */
     const names = teams
-  .map(t => t.name.trim())
-  .filter(Boolean)
-  .sort((a, b) => a.localeCompare(b, "pl"));
+      .map(t => t.name.trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "pl"));
     if (names.length < 2) { setSchedule([]); return; }
 
     const clubOf = n => (teams.find(t => t.name === n)?.club || "").trim().toLowerCase();
 
-    /* 1. wszystkie dozwolone pary */
+    /* 1) wszystkie mecze (bez pary specjalnej, bez wewnątrz‑klubowych) */
     const pairs = [];
     for (let i = 0; i < names.length; i++) {
       for (let j = i + 1; j < names.length; j++) {
         const a = names[i], b = names[j];
-        if (clubOf(a) && clubOf(a) === clubOf(b)) continue;           // ten sam klub
-        if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue; // para specjalna
+        if (clubOf(a) && clubOf(a) === clubOf(b)) continue;
+        if ((a === specialTeamA && b === specialTeamB) || (a === specialTeamB && b === specialTeamA)) continue;
         pairs.push([a, b]);
       }
     }
-    pairs.sort((p, q) => (p[0] + p[1]).localeCompare(q[0] + q[1], "pl"));
 
-    /* 2. minimalna liczba rund */
-    let remaining = [...pairs];
-    const rawRounds = [];
-    while (remaining.length) {
-      const best = getBestMatching(remaining, fields);
-      best.sort((p, q) => (p[0] + p[1]).localeCompare(q[0] + q[1], "pl"));
-      rawRounds.push(best);
-      const used = new Set(best.map(p => `${p[0]}|${p[1]}`));
-      remaining = remaining.filter(p => !used.has(`${p[0]}|${p[1]}`));
-    }
+    /* 2) optymalne rundy */
+    const rounds0 = buildOptimalRounds(pairs, fields);
 
-    /* 3. para specjalna */
+    /* 3) para specjalna */
     if (specialTeamA && specialTeamB) {
-      const last = rawRounds[rawRounds.length - 1] || [];
-      const used = new Set(last.flat());
-      if (!used.has(specialTeamA) && !used.has(specialTeamB) && last.length < fields)
-        last.push([specialTeamA, specialTeamB]);
-      else
-        rawRounds.push([[specialTeamA, specialTeamB]]);
+      const last = rounds0[rounds0.length - 1];
+      const used = new Set(last.matches.flatMap(m => m.pair));
+      if (used.has(specialTeamA) || used.has(specialTeamB) || last.matches.length >= fields) {
+        rounds0.push({ matches: [{ pair: [specialTeamA, specialTeamB] }] });
+      } else {
+        last.matches.push({ pair: [specialTeamA, specialTeamB] });
+      }
     }
 
-    /* 4. przydział boisk (fair‑play) */
-    const lastField = Object.fromEntries(names.map(n => [n, null]));
-    const streak    = Object.fromEntries(names.map(n => [n, 0]));
-    const final = rawRounds.map(matches => {
-      const round = [];
-      const usedFld = new Set();
-      for (const [a, b] of matches) {
-        let field = null;
-        for (let f = 1; f <= fields; f++) {
-          if (usedFld.has(f)) continue;
-          if ((lastField[a] !== f || streak[a] < 2) && (lastField[b] !== f || streak[b] < 2)) { field = f; break; }
-        }
-        if (!field) { for (let f = 1; f <= fields; f++) if (!usedFld.has(f)) { field = f; break; } }
-        if (lastField[a] === field) streak[a]++; else { streak[a] = 1; lastField[a] = field; }
-        if (lastField[b] === field) streak[b]++; else { streak[b] = 1; lastField[b] = field; }
-        usedFld.add(field);
-        round.push({ field, pair: [a, b] });
-      }
-      return { matches: round.sort((x, y) => x.field - y.field) };
-    });
-
+    /* 4) przydział boisk (fair‑play) */
+    const final = assignFieldsFairPlay(rounds0, fields);
     setSchedule(final);
   };
 
-  /* ----- TIME UTILS ----- */
+  /* ---- time utils ---- */
   const totalRound = matchDuration + breakDuration;
-  const startMin  = (() => { const [h, m] = startTime.split(':').map(Number); return h * 60 + m; })();
+  const startMin = (()=>{ const [h,m]=startTime.split(':').map(Number); return h*60+m; })();
   const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
   const roundLabel = idx => `${fmt(startMin + idx*totalRound)}‑${fmt(startMin + idx*totalRound + matchDuration)}`;
 
-  /* ----- EXPORT EXCEL ----- */
+  /* ---- export excel ---- */
   const exportToExcel = () => {
     if (!schedule.length) return;
     const wb = XLSX.utils.book_new();
 
-    /* Arkusz zbiorczy */
-    const header = ["Runda", "Godzina"];
-    for (let f = 1; f <= fields; f++) header.push(`Boisko ${f} A`, `Boisko ${f} B`);
+    const header = ["Runda","Godzina"];
+    for (let f=1; f<=fields; f++) header.push(`Boisko ${f} A`,`Boisko ${f} B`);
     const rows = [header];
-    schedule.forEach((rnd, idx) => {
-      const row = [idx+1, roundLabel(idx)];
-      for (let f = 1; f <= fields; f++) {
-        const m = rnd.matches.find(x => x.field === f);
-        if (m) row.push(m.pair[0], m.pair[1]); else row.push("", "");
+
+    schedule.forEach((rnd,idx)=>{
+      const r=[idx+1, roundLabel(idx)];
+      for (let f=1; f<=fields; f++){
+        const m = rnd.matches.find(x=>x.field===f);
+        if (m) r.push(m.pair[0], m.pair[1]); else r.push("","");
       }
-      rows.push(row);
+      rows.push(r);
     });
-    const wsMain = XLSX.utils.aoa_to_sheet(rows);
-    wsMain["!merges"] = Array.from({ length: fields }, (_, i)=>({ s:{r:0,c:2+i*2 }, e:{r:0,c:3+i*2} }));
-    XLSX.utils.book_append_sheet(wb, wsMain, "Harmonogram");
-    /* Arkusze boisk */
-    for (let f = 1; f <= fields; f++) {
-      const sheetRows = [["Runda","Godzina","Drużyna A","Drużyna B"]];
-      schedule.forEach((rnd, idx) => {
-        const m = rnd.matches.find(x => x.field === f);
-        if (m) sheetRows.push([idx+1, roundLabel(idx), m.pair[0], m.pair[1]]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!merges"]=Array.from({length:fields},(_,i)=>({s:{r:0,c:2+i*2},e:{r:0,c:3+i*2}}));
+    XLSX.utils.book_append_sheet(wb,ws,"Harmonogram");
+
+    for (let f=1; f<=fields; f++){
+      const sheetRows=[["Runda","Godzina","A","B"]];
+      schedule.forEach((rnd,idx)=>{
+        const m=rnd.matches.find(x=>x.field===f);
+        if(m) sheetRows.push([idx+1,roundLabel(idx),m.pair[0],m.pair[1]]);
       });
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetRows), `Boisko ${f}`);
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sheetRows),`Boisko ${f}`);
     }
 
-    XLSX.writeFile(wb, "harmonogram_turnieju.xlsx");
+    XLSX.writeFile(wb,"harmonogram_turnieju.xlsx");
   };
-
-  /* ----- RENDER ----- */
+  /* ---------- RENDER ---------- */
   return (
     <div className="max-w-6xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Turniejownik ⚽</h1>
@@ -199,14 +226,18 @@ export default function Turniejownik() {
           <select className="border p-2 w-full" value={specialTeamA}
                   onChange={e=>setSpecialTeamA(e.target.value)}>
             <option value="">Wybierz drużynę A</option>
-            {teams.map((t,i)=><option key={`sa-${i}`} value={t.name}>{t.name}</option>)}
+            {teams.map((t,i)=>(
+              <option key={`sa-${i}`} value={t.name}>{t.name}</option>
+            ))}
           </select>
         </div>
         <div className="pt-6">
           <select className="border p-2 w-full" value={specialTeamB}
                   onChange={e=>setSpecialTeamB(e.target.value)}>
             <option value="">Wybierz drużynę B</option>
-            {teams.map((t,i)=><option key={`sb-${i}`} value={t.name}>{t.name}</option>)}
+            {teams.map((t,i)=>(
+              <option key={`sb-${i}`} value={t.name}>{t.name}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -216,9 +247,9 @@ export default function Turniejownik() {
       {teams.map((team,i)=>(
         <div key={i} className="grid grid-cols-6 gap-2 mb-2">
           <input type="text" className="border p-2 col-span-2" placeholder={`Drużyna ${i+1}`}
-                 value={team.name} onChange={e=>handleTeamChange(i,"name",e.target.value)}/>
+                 value={team.name}  onChange={e=>handleTeamChange(i,"name",e.target.value)}/>
           <input type="text" className="border p-2 col-span-2" placeholder="Klub"
-                 value={team.club} onChange={e=>handleTeamChange(i,"club",e.target.value)}/>
+                 value={team.club}  onChange={e=>handleTeamChange(i,"club",e.target.value)}/>
           <input type="color" className="w-full h-10 p-1"
                  value={team.color} onChange={e=>handleTeamChange(i,"color",e.target.value)}/>
           <button onClick={()=>removeTeam(i)} className="text-red-600 font-bold">✕</button>
