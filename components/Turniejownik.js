@@ -136,16 +136,44 @@ export default function Turniejownik() {
     /* 2) optymalne rundy */
     const rounds0 = buildOptimalRounds(pairs, fields);
 
-    /* 3) para specjalna */
-    if (specialTeamA && specialTeamB) {
-      const last = rounds0[rounds0.length - 1];
-      const used = new Set(last.matches.flatMap(m => m.pair));
-      if (used.has(specialTeamA) || used.has(specialTeamB) || last.matches.length >= fields) {
-        rounds0.push({ matches: [{ pair: [specialTeamA, specialTeamB] }] });
-      } else {
-        last.matches.push({ pair: [specialTeamA, specialTeamB] });
+    /* 3) para specjalna — musi trafić do ostatniej rundy, bez tworzenia nowej */
+if (specialTeamA && specialTeamB) {
+  // znajdź rundę, w której obecnie jest specjalna para
+  let srcIdx = -1, matchIdx = -1;
+  rounds0.forEach((rnd, rIdx) => {
+    rnd.matches.forEach((m, mIdx) => {
+      if ((m.pair[0] === specialTeamA && m.pair[1] === specialTeamB) ||
+          (m.pair[0] === specialTeamB && m.pair[1] === specialTeamA)) {
+        srcIdx = rIdx; matchIdx = mIdx;
+      }
+    });
+  });
+
+  const last = rounds0[rounds0.length - 1];
+  // jeżeli już jest w rundzie 7 ‑ nic nie robimy
+  if (srcIdx !== rounds0.length - 1) {
+    const specialMatch = rounds0[srcIdx].matches.splice(matchIdx, 1)[0];
+
+    // 1) spróbuj dodać do ostatniej rundy jeśli jest wolne boisko
+    const teamSetLast = new Set(last.matches.flatMap(m => m.pair));
+    if (last.matches.length < fields &&
+        !teamSetLast.has(specialTeamA) && !teamSetLast.has(specialTeamB)) {
+      last.matches.push(specialMatch);
+    } else {
+      // 2) w ostatniej rundzie brak miejsca → wymiana
+      for (let i = 0; i < last.matches.length; i++) {
+        const cand = last.matches[i];
+        const teamsInSrc = new Set(rounds0[srcIdx].matches.flatMap(m => m.pair));
+        if (!teamsInSrc.has(cand.pair[0]) && !teamsInSrc.has(cand.pair[1])) {
+          last.matches[i] = specialMatch;
+          rounds0[srcIdx].matches.push(cand);
+          break;
+        }
       }
     }
+  }
+}
+
 
     /* 4) przydział boisk (fair‑play) */
     const final = assignFieldsFairPlay(rounds0, fields);
