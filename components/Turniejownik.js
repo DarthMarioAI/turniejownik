@@ -59,7 +59,10 @@ export default function Turniejownik() {
 
   /* ----- GENERATE SCHEDULE ----- */
   const generateSchedule = () => {
-    const names = teams.map(t => t.name.trim()).filter(Boolean);
+    const names = teams
+  .map(t => t.name.trim())
+  .filter(Boolean)
+  .sort((a, b) => a.localeCompare(b, "pl"));
     if (names.length < 2) { setSchedule([]); return; }
 
     const clubOf = n => (teams.find(t => t.name === n)?.club || "").trim().toLowerCase();
@@ -81,6 +84,7 @@ export default function Turniejownik() {
     const rawRounds = [];
     while (remaining.length) {
       const best = getBestMatching(remaining, fields);
+      best.sort((p, q) => (p[0] + p[1]).localeCompare(q[0] + q[1], "pl"));
       rawRounds.push(best);
       const used = new Set(best.map(p => `${p[0]}|${p[1]}`));
       remaining = remaining.filter(p => !used.has(`${p[0]}|${p[1]}`));
